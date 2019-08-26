@@ -6,13 +6,15 @@ Created on Fri Aug 23 17:31:26 2019
 """
 
 import gym
-from gym_snake import snake_wrapper as snake_skin, enjoy_snake
-from gym_snake.networks import snake_cnn
+from gym_snake import snake_wrapper as snake_skin, ascii_snake
 from baselines import deepq
 import argparse
+import tensorflow as tf
+import numpy as np
+from baselines.a2c.utils import conv, fc, conv_to_fc
 
 parser = argparse.ArgumentParser(description='Have a CNN learn to play snake.')
-parser.add_argument('-p','--play', dest='playing', action='store_true', 
+parser.add_argument('-p','--play', dest='playing', action='store_true',
                     help='Watch the NN play. (Default: learn instead)')
 parser.add_argument('-s','--shape', dest='shape', action='store', nargs=2,
                     default=(10,10), type=int,
@@ -27,6 +29,20 @@ parser.add_argument('-f','--file_name', dest='file_name', action='store',
                     help='File name for the trained model for saving and '+
                     'loading.')
 
+def snake_cnn(images, **conv_kwargs):
+    """
+    CNN based on Nature paper. Made smaller as there is less visual
+    information.
+    """
+    images = tf.cast(images, tf.float32)
+    activ = tf.nn.relu
+    h1 = activ(conv(images, 'c1', nf=16, rf=4, stride=1, init_scale=np.sqrt(2),
+                    **conv_kwargs))
+    h2 = activ(conv(h1, 'c2', nf=64, rf=2, stride=1, init_scale=np.sqrt(2),
+                    **conv_kwargs))
+    fl = conv_to_fc(h2)
+    return activ(fc(fl, 'fc1', nh=128, init_scale=np.sqrt(2)))
+
 def play(shape):
     env = gym.make("gym_snake:snake-v0",shape=shape)
     env = snake_skin(env)
@@ -38,7 +54,7 @@ def play(shape):
     )
     try:
         while True:
-            enjoy_snake(env,model)
+            ascii_snake(env,model)
     except:
         pass
 
