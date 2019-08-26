@@ -1,0 +1,1 @@
+from gym_snake.wrappers.snake_wrappers import snake_wrapper
