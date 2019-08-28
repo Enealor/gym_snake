@@ -16,14 +16,14 @@ from gym import error, spaces, utils
 from gym.utils import seeding
 
 class Apple:
-    def __init__(self, position):
-        self.position = position
+    def __init__(self, x,y):
+        self.x, self.y = x,y
 
 class Snake:
-    def __init__(self, length,initial_position=(2,0),
+    def __init__(self, length,head_x=2,head_y=0,
                  initial_direction=RIGHT):
         # remember default length
-        self.initial_length = length
+        self._initial_length = length
         # set up snake length, position and direction
         self.length = length
         self.trail = None
@@ -31,7 +31,7 @@ class Snake:
         self.y = None
         self.last_direction = [1,0]
 
-        self.reset(initial_position,initial_direction)
+        self.reset(head_x,head_y,initial_direction)
 
     def grow(self, length = 1):
         #Increases the size of the snake
@@ -48,35 +48,33 @@ class Snake:
             self.y[i] = self.y[i-1]
 
         # update position of head of snake
-        xdir,ydir = self.action_to_direction(action)
-        self.x[0] += xdir
-        self.y[0] += ydir
+        xd,yd = self.direction(action)
+        self.x[0] += xd
+        self.y[0] += yd
 
-    def reset(self,head_location,direction_headed):
+    def reset(self,head_x,head_y,action):
         #Reset body length
-        self.length = self.initial_length
-        #Reset direction
-        xdir,ydir = self.action_to_direction(direction_headed)
-        #Reset body. The body is in the direction opposite of the direction
-        #headed.
-        xi, yi = head_location
-        self.x = [xi-i*xdir for i in range(self.length)]
-        self.y = [yi-i*ydir for i in range(self.length)]
+        self.length = self._initial_length
+        #The direction is opposite in construction so that it is as if the snake
+        #was already heading in the direction of action.
+        xd,yd = self.direction(action)
+        self.x = [head_x-i*xd for i in range(self.length)]
+        self.y = [head_y-i*yd for i in range(self.length)]
 
-    def action_to_direction(self,action):
-        #Processes action into a direction. If the action is not recognized,
-        #then the direction does not change.
+    def direction(self,action):
+        #Takes the action and returns the direction of the snake
         if action == LEFT:
-            self.direction = [-1,0]
+            direction_headed = [-1,0]
         elif action == RIGHT:
-            self.direction = [1,0]
+            direction_headed = [1,0]
         elif action == DOWN:
-            self.direction = [0,1]
+            direction_headed = [0,1]
         elif action == UP:
-            self.direction = [0,-1]
+            direction_headed = [0,-1]
         else:
-            pass
-        return self.direction
+            direction_headed = self.last_direction
+        self.last_direction = direction_headed
+        return direction_headed
 
 class SnakeEnv(gym.Env):
 
@@ -87,14 +85,14 @@ class SnakeEnv(gym.Env):
         self.seed(seed)
         self.nrow, self.ncol = shape
         self.reward_range = (-1,1)
+        self.observation_space = spaces.Box(0,1,shape=[*shape,1])
+        self.action_space = spaces.Discrete(5)
         self.score = 0
 
         self.snake = Snake(start_length)
-        self.apple = Apple((0,0))
-        self.move_apple()
-
-        self.observation_space = spaces.Box(0,1,shape=[*shape,1])
-        self.action_space = spaces.Discrete(5)
+        self.apple = Apple(0,0)
+        #Reset the game board to ensure random start
+        self.reset()
 
     def step(self, action):
         self.snake.slither(action)
@@ -102,7 +100,7 @@ class SnakeEnv(gym.Env):
         done = self.gameover()
         if done:
             reward = self.reward_range[0]
-        elif self.apple.position in zip(self.snake.x,self.snake.y):
+        elif self.apple_in_snake():
             self.ate_apple()
             reward = self.reward_range[1]
         else:
@@ -133,25 +131,28 @@ class SnakeEnv(gym.Env):
         #easier to read as "not inside both constraints"
         return not (0<= x < self.ncol and 0 <= y < self.nrow)
 
+    def apple_in_snake(self):
+        return (self.apple.x,self.apple.y) in zip(self.snake.x,self.snake.y)
+
     def ate_apple(self):
         self.snake.grow()
         self.move_apple()
         self.score += 1
 
     def move_apple(self):
-        snake = list(zip(self.snake.x,self.snake.y))
-        self.apple.position = (self.np_random.randint(self.ncol),
-                               self.np_random.randint(self.nrow))
-        while self.apple.position in snake:
-            self.apple.position = (self.np_random.randint(self.ncol),
-                                   self.np_random.randint(self.nrow))
+        self.apple.x = self.np_random.randint(self.ncol)
+        self.apple.y = self.np_random.randint(self.nrow)
+        while self.apple_in_snake():
+            #If we are in the snake, try again
+            self.apple.x = self.np_random.randint(self.ncol)
+            self.apple.y = self.np_random.randint(self.nrow)
 
     def reset(self):
-        length = self.snake.initial_length
-        head_x = self.np_random.randint(length,self.ncol-length)
-        head_y = self.np_random.randint(length,self.nrow-length)
+        snake_length = self.snake._initial_length
+        head_x = self.np_random.randint(snake_length,self.ncol-snake_length)
+        head_y = self.np_random.randint(snake_length,self.nrow-snake_length)
         orientation = self.np_random.randint(self.action_space.n)
-        self.snake.reset((head_x,head_y),orientation)
+        self.snake.reset(head_x,head_y,orientation)
         self.move_apple()
         self.score = 0
         return self.render('intensity')
@@ -162,20 +163,20 @@ class SnakeEnv(gym.Env):
             out[:] = ' '
             if not self.outside_box():
                 out[(self.snake.y,self.snake.x)] = 'S'
-            out[(self.apple.position[1],self.apple.position[0])] = 'A'
+            out[(self.apple.y,self.apple.x)] = 'A'
             print(out)
         elif mode=='intensity':
             out = np.zeros((self.nrow,self.ncol,1), dtype = 'float')
             if not self.outside_box():
                 out[(self.snake.y,self.snake.x),0] = .5
-            out[(self.apple.position[1],self.apple.position[0]),0] = 1
+            out[(self.apple.y,self.apple.x),0] = 1
             return out
         elif mode=='dict':
             return self.make_dict()
 
     def make_dict(self):
         return {'snake': list(zip(self.snake.x,self.snake.y)),
-                'apple': (self.apple.position[1],self.apple.position[0]),
+                'apple': (self.apple.x,self.apple.y),
                 'score': self.score,
                 'shape': (self.ncol,self.nrow)}
 

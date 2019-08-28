@@ -21,16 +21,21 @@ def snake_wrapper(env, stack_length=3):
     return env
 
 parser = argparse.ArgumentParser(description='Have a CNN learn to play snake.')
-parser.add_argument('-p','--play', dest='playing', action='store_true',
-                    help='Watch the NN play. (Default: learn instead)')
-parser.add_argument('-e','--epochs', dest='epochs', action='store',
+parser.add_argument('-t','--time_steps', dest='time_steps', action='store',
                     default=10000, type=int,
                     help='The number of timesteps to iterate through when '+
-                    'learning. Ignored during play behavior. (Default: 100000)')
+                    'learning. Ignored during play behavior. (Default: 10000)')
+parser.add_argument('-p','--play', dest='playing', action='store_true',
+                    help='Watch the NN play. (Default: False)')
+parser.add_argument('-e','--episodes', dest='episodes', action='store',
+                    default=10, type=int,
+                    help='The number of episodes to watch the snake play. An '+
+                    'episode ends when the snake crashes into a wall or into '+
+                    'their tail. (Default: 10)')
 parser.add_argument('-f','--file_name', dest='file_name', action='store',
                     default='snake_model.pkl',type=str,
                     help='File name for the trained model for saving and '+
-                    'loading.')
+                    'loading. (Default: snake_model.pkl)')
 
 def snake_cnn(images, **conv_kwargs):
     """
@@ -55,26 +60,24 @@ class SnakePolicy(FeedForwardPolicy):
                                           cnn_extractor=snake_cnn,
                                           layer_norm=False, **_kwargs)
 
-def play(file_name):
+def play(episodes,file_name):
     env = gym.make("gym_snake:snake-v0")
     env = snake_wrapper(env)
     model = DQN.load(file_name,env)
-    try:
+    for _ in range(episodes):
         ascii_snake(env,model)
-    except:
-        raise
 
-def learn(epochs,file_name):
+def learn(time_steps,file_name):
     env = gym.make('gym_snake:snake-v0')
     env = snake_wrapper(env)
     model = DQN(SnakePolicy,env,verbose=1)
-    model.learn(epochs)
+    model.learn(time_steps)
     model.save(file_name)
 
 
 if __name__ == '__main__':
     args = parser.parse_args()
     if args.playing:
-        play(args.file_name)
+        play(args.episodes,args.file_name)
     else:
-        learn(args.epochs,args.file_name)
+        learn(args.time_steps,args.file_name)
